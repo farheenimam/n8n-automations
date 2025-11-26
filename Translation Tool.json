@@ -1,0 +1,441 @@
+{
+  "name": "Translation Tool",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "get",
+        "documentURL": "https://docs.google.com/document/d/1tWE48FY6xBe0Tq5IlWsIfzlzBK9QkvXezDzRFY0dlB4/edit?usp=sharing"
+      },
+      "id": "74c2b574-876c-4a0f-a7c2-def641f7dacb",
+      "name": "Get Names Database1",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        832,
+        1136
+      ],
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "6w7sVgMZVlMK1Bc1",
+          "name": "Google Docs account 2"
+        }
+      },
+      "notes": "Retrieves character and place names from Google Doc"
+    },
+    {
+      "parameters": {
+        "jsCode": "const docContent = $input.first().json.content;\n\nlet namesData = {\n  characters: [],\n  places: [],\n  raw_text: ''\n};\n\n// Extract all text from Google Doc structure\nfunction extractText(content) {\n  if (Array.isArray(content)) {\n    content.forEach(item => extractText(item));\n  } \n  else if (content && typeof content === \"object\") {\n    if (content.content) {\n      extractText(content.content);\n    } \n    else if (content.textRun && content.textRun.content) {\n      namesData.raw_text += content.textRun.content;\n    }\n    else if (typeof content.content === \"string\") {\n      // ✅ Handles your case where \"content\" is already plain text\n      namesData.raw_text += content.content;\n    }\n  } \n  else if (typeof content === \"string\") {\n    // ✅ Direct string node\n    namesData.raw_text += content;\n  }\n}\n\nextractText(docContent);\n\n// ✅ Now parsing works\nconst sections = namesData.raw_text.split(/Place:/i);\nif (sections.length > 0) {\n  const characterSection = sections[0].replace(/Character name:/i, '').trim();\n  const characterLines = characterSection.split('\\n').filter(line => line.trim());\n  \n  characterLines.forEach(line => {\n    line = line.trim();\n    if (line && !line.startsWith('-') && line.length > 1) {\n      const mainName = line.split(' - ')[0].split(' (')[0].trim();\n      if (mainName && mainName.length > 1) {\n        namesData.characters.push(mainName);\n      }\n    }\n  });\n}\n\nif (sections.length > 1) {\n  const placeSection = sections[1].trim();\n  const placeLines = placeSection.split('\\n').filter(line => line.trim());\n  \n  placeLines.forEach(line => {\n    line = line.trim();\n    if (line.startsWith('-')) {\n      const placeName = line.replace(/^-\\s*/, '').trim();\n      if (placeName) {\n        namesData.places.push(placeName);\n      }\n    }\n  });\n}\n\nreturn namesData;\n"
+      },
+      "id": "a73b97c6-d0a3-4875-8a34-b0094c0af40c",
+      "name": "Parse Names Database1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1168,
+        1136
+      ],
+      "notes": "Extracts character and place names from the database"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "next_chapter",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f159177a-714f-4247-b6d9-6181439836c9",
+      "name": "Check if Next Chapter1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        144,
+        1440
+      ],
+      "notes": "Checks if we should move to next chapter"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.18.110:11435/api/chat",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "ollamaApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"model\": \"deepseek-r1\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"TRANSLATION REQUEST - Korean Historical Novel Chapter\\n\\n**Critical Translation Guidelines:**\\n\\n1. **Korean Sentence Structure (SOV → SVO)**: Restructure sentences naturally for English\\n2. **Missing Pronouns**: Korean lacks grammatical pronouns - carefully infer he/she/they/it from context\\n3. **Honorifics & Formality**: Translate Korean honorifics to appropriate English equivalents:\\n   - 전하 (jeonha) → Your Majesty\\n   - 마마 (mama) → Your Highness\\n   - 대감 (daegam) → Your Lordship/Your Grace\\n   - Formal speech → Respectful English tone\\n\\n4. **Historical Context**: This is a historical/royal setting - maintain:\\n   - Proper royal titles and court language\\n   - Military ranks and positions\\n   - Formal address patterns\\n\\n5. **Korean Particles**: Handle particles (은/는, 이/가, 을/를, 에/에서) by restructuring naturally\\n6. **Names**: Keep Korean names in romanization - consistency checking happens later\\n7. **Narrative Flow**: Preserve the story's tone and pacing\\n\\n**Korean Chapter Text to Translate:**\\n\\n 107화\\n\\n귓전을 때리는 트럼펫 소리에 덧붙여진 북소리가 연회장을 가득 메웠다. 그 소리에 맞춰 브리틴의 나머지 친위대와 사절단이 뒤이어 들어왔다.\\n\\n“친우가 오셨군!”\\n\\n이에 호이든은 흔치 않게 반색하며 연합국의 군대장을 맞이했다.\\n\\n무도회를 직관할 수 있는 상석 앞에 무릎 꿇은 칼론은 그 덩치만으로도 제 존재를 혁혁하게 드러내고 있었다. 칼론의 어깨를 두드리며 뭐라 격려하는 듯한 추임새를 덧붙이는 호이든의 모습을 보던 아더는 불량스레 제 혀를 짓씹었다.\\n\\n건방 떨 때부터 알아봤어야 했는데.\\n\\n아더는 짧은 후회를 삼켰다. 그날 밤 무슨 생각으로 넥서스에 대한 충정을 운운하며 제게 다가왔는지는 모르지만, 분명한 건 친위대 말단이라 거짓 너스레를 떨며 세 치 혀를 나불거렸다는 것이었다. 홀로 폐하의 문밖을 지키시기엔 지나치게 명석한 분이시라 했던가. 감히 그따위 같잖은 동정까지 덧붙이며.\\n\\n커다란 황궁의 연회장에서 칼론과 호이든은 기껏해야 새끼손가락 정도로 보일 뿐이었다. 나누는 얘기를 듣기엔 거리가 지나치게 멀었다.\\n\\n아더는 빈 샴페인 잔을 한번 내려다보곤 곁에 선 베스를 돌아봤다. 딱딱하게 굳은 그녀의 시선 또한 상석의 황제를 향해 있긴 했지만, 그 시선의 끝이 황제는 아니리란 확신이 있었다. 황제의 곁엔 데베르가 서 있었으니까.\\n\\n아더는 제 우스운 추측에 눈살을 한번 찌푸리곤 주위를 둘러봤다. 잠시 사절단의 행진에 쏠렸던 사람들의 관심은 다시 황자와 소식지 속 양녀에게로 돌아와 있었다. 처음보단 덜하긴 했어도 여전히 부채 뒤에 입술을 숨긴 채 시시덕거리는 꼴들은 여전했다.\\n\\n하지만 아더의 생각과 달리 베스는 데베르를 보고 있지 않았다. 아니. 그를 보고 있기도 했지만, 정확히는 황제의 앞에 선 붉은 머리통을 지켜보고 있었다. 베스는 태연하게 고개를 세운 채, 주위에 누가 있는지를 살폈다. 당연히 있으리라 생각한 하워드가 보이지 않았다. 하워드가 없다면 그 끄나풀이라도 보여야 하는데…. 이상하리만치 아무도 보이지 않았다.\\n\\n대체 어디에 숨은 거지.\\n\\n연회장의 이 층 관람석을 훑던 베스의 눈동자가 다시 아래를 향할 때였다.\\n\\n한쪽 입꼬리를 씩 올린 칼론이 연회장을 구경하려는지 고개를 반쯤 뒤로 돌렸다. 그를 지켜보던 베스 또한 때마침 지나가는 시종을 향해 몸을 돌려 샴페인이 가득 찬 잔 하나를 손에 쥐었다. 생각지도 않은 술잔이었지만, 모든 행동은 처음부터 그러기로 한 사람처럼 자연스러웠다. 간단히 시종을 향해 턱을 까딱이곤 다시 고개를 천천히 돌려 앞을 봤을 땐, 칼론 또한 고개를 돌린 채 황제에게 뭐라 말을 건네고 있었다.\\n\\n아더의 곁으로도 샴페인이 올려진 쟁반을 든 시종이 다가왔지만, 그는 짤막하게 고개를 저었다. 아직도 빈 잔에선 냉기가 흘러내리고 있었다. 그 물기를 훑는 아더의 손가락에 고민이 묻어났지만, 이내 축축한 손가락은 그의 주머니 속으로 사라졌다.\\n\\n짧은 고민은 끝난 터였다.\\n\\n“잠시 실례하겠습니다, 베스 양.”\\n\\n제 입으로 파트너가 돌아올 때까지 곁에 있겠다 넉살을 피웠으면서 먼저 꼬리를 빼는 게 기분이 석연찮았지만, 어쩔 수 없었다. 베스는 알겠노라 고개를 주억이며 흘깃 다시 칼론에게로 눈길을 던졌다. 그 순간, 작게 보이던 데베르의 얼굴이 얼핏 이곳을 향한 것 같기도 했지만 찰나였다.\\n\\n“곧 돌아-”\\n\\n아더는 말을 뱉던 입술을 꾹 다물었다. 무도회장에서 파트너를 떠날 때면 습관처럼 하던 곧 돌아오겠다는 거짓말이 이번에도 툭 튀어나오려 했다.\\n\\n하지만 이쯤에서 멈춰야지. 더 추해지고 싶지 않다면.\\n\\n아더는 그걸 잘 알았다.\\n\\n“…오늘 즐거웠습니다, 베스 하워드 양.”\\n\\n가슴팍에 손을 올린 채 정갈한 인사를 건네는 아더를 향해, 베스도 제가 알고 있는 대로 최대한의 예우를 갖춰 떠나는 황자에게 인사를 올렸다.\\n\\n등을 돌린 아더는 연회장의 중앙을 향해 뚜벅뚜벅 걸어 나갔다. 호이든이 가까워질수록 뻐근해지는 목덜미에 저절로 타이에 손이 올라갔지만, 차마 느슨하게 풀지는 못했다.\\n\\n호이든의 앞에 서기 위해선 늘 여느 때와 같이 반듯한 황자의 모습을 하고 있어야만 했다. 그래야만 매정한 이복형이 조금이나마 그를 동생으로 인정했으니 어쩔 수 없었다. 설령 가족이 아니라 충직한 집안의 개 정도로 치부할지라도 말이다.\\n\\n인정받기 위해 애쓴다는 건 이런 거였다. 제 감정을 누르고, 치미는 순간의 욕구 따위는 거세하는. 부끄럽지 않은 황자가 되기 위한 그 모든 것이 아더는 익숙했다.\\n\\n“폐하.”\\n\\n“오, 아더구나.”\\n\\n흔치 않은 황제의 반색은 오늘만큼은 배다른 동생에게도 예외 없었다.\\n\\n아더를 본 칼론이 퍽 해맑은 웃음을 지었다. 시원스레 올라간 입꼬리가 매서운 듯한 인상과 맞물려 제법 매력적인 인상을 풍기는 사내였다.\\n\\n“안녕하십니까, 사령관님. 브리틴 군대장 칼론 인사드립니다.”\\n\\n칼론의 곧은 허리가 아더를 향해 숙어졌다. 본 적 있는 타국의 예우 방식에 아더의 눈썹이 들썩였다. 적당히 불편한 기색이 담긴 몸짓이었다.\\n\\n“군대장?”\\n\\n아더의 시선이 데베르를 한번 향했다, 다시 제 형에게로 돌아갔다. 애매한 미소를 걸친 입술 새로 가라앉은 목소리가 흘러나왔다.\\n\\n“폐하. 제가 모르는 새 브리틴의 군법이 바뀌었던가요.”\\n\\n황제의 뒷배나 다름없는 브리틴까지 믿지 못해 대령 이상의 직위를 주지 않던 게 불과 작년이었다. 자신을 집무실 바깥에 내놓은 채 무슨 말이 오갔는지는 몰라도, 적어도 일개 군인의 입에서 ‘브리틴 군대장’이란 소리는 나올 일이 없어야 했다.\\n\\n“군대장이라니….”\\n\\n“그저 호칭일 뿐입니다, 사령관님.”\\n\\n“난 폐하께 여쭈었다.”\\n\\n칼론과 아더의 눈이 마주쳤다. 순간 냉랭한 기운이 두 사람 사이를 맴돌았지만, 그 누구도 먼저 눈을 피하지 않았다.\\n\\n마주 보는 두 사람의 모습은 기묘했다. 곱상한 귀족 신사 같은 아더와, 거칠 것 없는 날짐승의 기운이 풍기는 칼론은 가십에 목마른 사람들의 시선을 끌기에 충분했다. 타고난 태라는 건 갖춰 입은 의복으로도 숨겨지지 않는 것이었다.\\n\\n“무례를 용서하십시오.”\\n\\n아더의 굳은 얼굴을 훑던 칼론은 금세 머리를 다시 숙였다. 붉은 머리통이 아더의 가슴팍 언저리까지 내려갔다.\\n\\n“그래, 아더. 혈기 어린 군대장의 패기 정도로 생각해주지.”\\n\\n얼마간 다시 올라오지 않는 붉은 머리카락을 응시하는 아더의 귓가로 호이든의 목소리가 꽂혔다.\\n\\n흔치 않은 반색을 내보이더니, 이번엔 답지 않은 아량까지. 아더는 그 생각을 곱씹으며 이젠 완연한 병색이 드러나는 제 형을 내려다봤다.\\n\\n작고, 유약하고… 다가올 죽음을 알면서도 모른 척하는 젊은 넥서스의 황제를.\\n\\n“알다시피 넥서스 군대장이 공석이 된 지도 어느덧 일 년이 넘었어. 그 공백에 브리틴 연합군의 기강이 흐트러질세라 임시로 군대장이란 명칭만 허용해줬을 뿐이다. 제아무리 브리틴 군대장이라 해도, 그 무게가 넥서스 군대장과는 다를 수밖에 없으니 지나치게 날 선 반응으로 사절단을 축하하는 오늘, 황제인 나를 민망하게 만들지 말렴. 공식 지위는 여전히 칼론 대령이니 사실 달라진 것도 없는 셈이니까.”\\n\\n“…데베르 공작도 알고 있던 사실입니까.”\\n\\n“사임한 군대장에게 군 소식을 알릴 필요는 없지.”\\n\\n아더는 순간적으로 안도하는 자신에게 구역질이 밀려왔다. 데베르도 자신처럼 몰랐으니 그리 최악은 아니라고. 고작 그따위 자위만으로도 한결 기분이 나아지는 제 꼴이 경멸스럽기만 했다.\\n\\n괜히 눈이 부신 척, 눈살을 찌푸리며 연회장 천장에 매달린 샹들리에를 올려다봤다. 건방지게 한밤중의 태양 노릇을 하는 황궁의 샹들리에는 빛나지 않아야 할 사람마저 빛나게 하고 있었다.\\n\\n한때는 모두가 보는 앞에서 저 샹들리에에 목을 매달고 싶다는 생각을 한 적도 있었다니.\\n\\n유난히 사랑을 갈구하던 소년 시절의 치기 어린 생각이 떠오른 아더는 그새 거칠해진 제 턱을 감싸 쥐곤 데베르에게 눈짓을 했다. 정말 몰랐냐는 뜻이었다.\\n\\n데베르는 예의 그 지루함을 담은 눈동자로 몇 번 칼론을 훑더니 겨우 한마디를 뱉었다.\\n\\n“칼을 오래 잡았나 보군.”\\n\\n“아.”\\n\\n칼론이 입술을 탁 벌리더니 제 두 손을 활짝 펼쳐 내려다봤다. 함께 있는 호이든과 아더까지 모두 볼 수 있게 한껏 내린 손엔 굳은살이 가득했다.\\n\\n“역시 알아보시네요.”\\n\\n칼론의 너스레에도 데베르는 반응하지 않았다. 그저 이 지겨운 시간을 견뎌보겠다는 듯 무감한 얼굴이었다. 칼론은 아더를 볼 때보다 호기심 어린 눈길로 데베르를 샅샅이 뜯어봤다.\\n\\n“넥서스에 오니 마음에 드는 것은 있고?”\\n\\n그런 칼론의 시선을 끊은 건 황제의 영양가 없는 질문이었다. 이에 억지로 시선을 거둔 칼론은 아쉬운 입맛을 슬쩍 다시며 연회장을 둘러봤다.\\n\\n마음에 드는 것이라. 모든 것이 호기롭게도 반짝이는 황궁의 연회장을 고작 마음에 든다 정도로 표현할 수 있을까. 비단 황궁뿐만이 아니었다. 반질한 넥서스 귀족들의 윤택 어린 얼굴, 값비싼 원단으로 맞춰진 연미복과 드레스, 계절에 상관없이 가장 아름다운 것만을 피워내는 화병….\\n\\n손에 닿고, 눈에 보이는 모든 것은 누구든 탐낼만했다.\\n\\n“감히 그 물음에 답할 수 있을까요. 넥서스에 아름답고 강한 것들이 넘쳐난다는 것은 근방의 모든 국가가 알 텐데요.”\\n\\n“그래도 더 눈길이 가는 건 있기 마련이지 않나.”\\n\\n그 말에 칼론의 입가가 비식 올라갔다. 칼론의 측면에 앉은 호이든에겐 보이지 않는 얼굴이었다.\\n\\n그 순간, 오케스트라의 긴 환영곡이 끝나고 본격적인 무도회의 시작을 알리는 팡파르가 울려 퍼졌다. 사람들의 박수갈채도 동시에 터져 나왔다.\\n\\n의자 팔걸이를 꾹 쥔 채 자리에서 일어난 호이든은 살짝 비틀거렸지만, 곧바로 아더가 그 곁에 바짝 붙어 티 나지 않게 부축했다. 멀찍이 선 사람들에겐 그저 황가의 두 형제가 사절단을 축하하는 모습으로 보일 따름이었다.\\n\\n황제의 오른팔이 번쩍 위로 올라갔다. 그와 동시에 타오르는 듯한 박수 소리도 더 뜨겁게 연회장을 가득 메웠다.\\n\\n연회의 시작을 알리는 신호였다.\\n\\n“그럼, 저는 먼저 이만.”\\n\\n칼론은 한쪽 무릎을 반쯤 굽혀 황제에게 예를 표하곤 여전히 달뜬 박수로 가득한 연회장 중앙을 천천히 걸어갔다. 유난히 여유가 깃든 얼굴은 새로운 브리틴의 군대장을 향한 영애들의 흠모 어린 시선과 심지어 영식들의 경계마저 즐기는 듯 착각하게 했다.\\n\\n그러나, 붉은 눈동자는 단 한 명만을 찾는 중이었다.\\n\\n“저기 계시는군.”\\n\\n그리고 그의 주인공은 멀리 있지 않았다. 목표물을 발견한 걸음이 한층 더 거침없이 뻗어 나가기 시작했다.\\n\\n“파트너도 없이 홀로 계십니까.”\\n\\n마음에 드는 것.\\n\\n순간, 칼론은 황제의 말을 떠올렸다.\"\n    }\n  ],\n  \"think\": false,\n  \"stream\": false\n}\n",
+        "options": {
+          "timeout": 50000000
+        }
+      },
+      "id": "4f3de114-d892-4c08-b0b5-03bf132e5b52",
+      "name": "Initial Translation1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        816,
+        1440
+      ],
+      "credentials": {
+        "ollamaApi": {
+          "id": "H4LnMY0YMmSpWWoi",
+          "name": "Ollama account 2"
+        }
+      },
+      "notes": "Translates Korean text to English with detailed context"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentURL": "=1tWE48FY6xBe0Tq5IlWsIfzlzBK9QkvXezDzRFY0dlB4",
+        "actionsUi": {
+          "actionFields": [
+            {
+              "action": "insert",
+              "text": "={{ $('Process Consistency Check1').item.json.final_translation }}"
+            }
+          ]
+        }
+      },
+      "id": "6f045738-3bdb-4521-8ada-336e685d27bc",
+      "name": "Add Content to Doc1",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        1488
+      ],
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "6w7sVgMZVlMK1Bc1",
+          "name": "Google Docs account 2"
+        }
+      },
+      "notes": "Adds the translated content to the Google Doc"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Add delay for rate limiting\nconst delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));\nawait delay(2000);\n\n// Get full API response\nconst input = $input.first().json.result;\nlet response = $('Initial Translation1').first().json.result || input; // prefer \"result\", fallback to whole JSON\n\nlet correctedText = '';\n\nif (response.message && response.message.content) {\n  correctedText = response.message.content;\n} else if (response.result && typeof response.result === 'string') {\n  correctedText = response.result;\n} else if (response.choices && response.choices[0]) {\n  correctedText = response.choices[0].message?.content || response.choices[0].text;\n} else if (typeof response === 'string') {\n  correctedText = response;\n} else {\n  throw new Error('Could not parse consistency check response');\n}\n\n// Clean up\ncorrectedText = correctedText.trim();\n\n// ✅ Only fail if it's empty\nif (!correctedText || correctedText.length === 0) {\n  throw new Error('Consistency check appears empty or failed');\n}\n\n// Estimate tokens\nconst estimatedTokens = Math.ceil(correctedText.length / 4);\n\n// Return structured output\nreturn {\n  final_translation: correctedText,\n  consistency_tokens_used: estimatedTokens,\n  consistency_completed: new Date().toISOString()\n};"
+      },
+      "id": "83fa8076-6f35-4b16-b9eb-6d2e989841fb",
+      "name": "Process Consistency Check1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        1472
+      ],
+      "notes": "Processes consistency check response with rate limiting"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chapter-decision",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d23c0d9b-cc6f-403f-8b87-e87be6283f73",
+      "name": "Chapter Decision Handler1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -208,
+        1232
+      ],
+      "webhookId": "chapter-decision",
+      "notes": "Handles chapter approval decisions"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.18.110:11434/api/chat",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "ollamaApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"deepseek-r1\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"CONSISTENCY & NAME CORRECTION TASK\\n\\nYou are a professional editor for Korean historical novels. Your task is to review and correct a translated chapter, ensuring character and place names are consistent with the established database.\\n\\n**Character Names Database: {{ $('Parse Names Database').first().json.characters}} and Places: {{ $('Parse Names Database').first().json.places}} '\\\\n\\\\n \\n\\n**Instructions:**\\n1. Check all character names against the database - correct any inconsistencies\\n2. Check all place names against the database - correct any inconsistencies\\n3. Ensure name spellings are uniform throughout\\n4. Maintain the story flow and readability\\n5. Keep all other translation quality intact\\n6. Return ONLY the corrected text, no explanations Translation to Review:{{ $json.translated_text_escaped  }} .\"\n    }\n  ],\n  \"think\": false,\n  \"stream\": false\n}\n",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "c9cf1e6d-acc4-4794-9e53-5477a0a6a312",
+      "name": "Consistency Check1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1328,
+        1472
+      ],
+      "credentials": {
+        "ollamaApi": {
+          "id": "H4LnMY0YMmSpWWoi",
+          "name": "Ollama account 2"
+        }
+      },
+      "notes": "Checks and corrects name consistency using Claude"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract values from incoming body\nconst decision = $input.first().json.body.decision;\nlet chapterDataStr = $input.first().json.body.chapter_data;\n\nlet chapterData;\n\n// If it's already parsed as an object\nif (typeof chapterDataStr === \"object\") {\n  chapterData = chapterDataStr;\n}\n// If it's a string (most common case in your webhook)\nelse if (typeof chapterDataStr === \"string\") {\n  // Clean up HTML encoded quotes if they appear\n  if (chapterDataStr.includes(\"&quot;\")) {\n    chapterDataStr = chapterDataStr.replace(/&quot;/g, '\"');\n  }\n  chapterData = JSON.parse(chapterDataStr);\n}\nelse {\n  throw new Error(\"Invalid chapter_data format: must be object or string\");\n}\n\n// ✅ Now handle decision logic\nif (decision === 'stop') {\n  return {\n    action: 'stop',\n    message: 'Processing stopped by user',\n    processed_chapters: chapterData.current_chapter_index,\n    total_chapters: chapterData.total_chapters\n  };\n}\n\nif (decision === 'skip') {\n  const nextIndex = chapterData.current_chapter_index + 1;\n  if (nextIndex >= chapterData.total_chapters) {\n    return {\n      action: 'complete',\n      message: 'All chapters processed',\n      processed_chapters: chapterData.current_chapter_index + 1,\n      total_chapters: chapterData.total_chapters\n    };\n  }\n\n  chapterData.current_chapter_index = nextIndex;\n  return {\n    action: 'next_chapter',\n    chapter_data: chapterData\n  };\n}\n\nif (decision === 'approve') {\n  const currentChapter = chapterData.chapters[chapterData.current_chapter_index];\n\n  // ✅ Escape text:\n  // - JSON.stringify to handle internal quotes\n  // - replace \\n with \\\\n\n  // - keep as raw string (not parsed back)\n  let safeText = JSON.stringify(currentChapter.korean_text);\n  safeText = safeText.replace(/\\n/g, \"\\\\n\");\n\n  // Remove outer quotes added by JSON.stringify\n  safeText = safeText.slice(1, -1);\n\n  return {\n    action: 'translate',\n    korean_text: safeText,   // safely escaped with \\\" and \\\\n\n    chapter_number: currentChapter.chapter_number,\n    chapter_title: currentChapter.chapter_title,\n    source_type: 'full_book_chapter',\n    word_count: currentChapter.word_count,\n    processing_started: new Date().toISOString(),\n    book_data: chapterData,\n    current_chapter_index: chapterData.current_chapter_index\n  };\n}\n\nthrow new Error('Invalid decision: ' + decision);\n"
+      },
+      "id": "9981d986-1f2e-466b-b3b5-7b14d55c794c",
+      "name": "Process Chapter Decision1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1232
+      ],
+      "notes": "Processes the user's decision for the chapter"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Add delay for rate limiting and parse translation\nconst delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));\nawait delay(2000); // 2 second delay\n\nconst response = $input.first().json.message.content;\nlet translatedText = '';\n\nif (response.result) {\n  translatedText = response.result;\n} else if (response.choices && response.choices[0]) {\n  translatedText = response.choices[0].message.content || response.choices[0].text;\n} else if (typeof response === 'string') {\n  translatedText = response;\n} else {\n  throw new Error('Could not parse translation response');\n}\n\ntranslatedText = translatedText.trim();\n\nif (translatedText.length < 100) {\n  throw new Error('Translation appears incomplete or failed');\n}\n\n// Estimate token usage\nconst estimatedTokens = Math.ceil(translatedText.length / 4);\n\n// Escape text for safe JSON embedding\nfunction escapeForJson(str) {\n  return str\n    .replace(/\\\\/g, \"\\\\\\\\\")   // escape backslashes\n    .replace(/\"/g, '\\\\\"')     // escape double quotes\n    .replace(/\\n/g, \"\\\\n\")    // escape newlines\n    .replace(/\\r/g, \"\\\\r\")    // escape carriage returns\n    .replace(/\\t/g, \"\\\\t\");   // escape tabs\n}\n\nconst safeText = escapeForJson(translatedText);\n\nreturn {\n  translated_text: translatedText,       // raw, for humans\n  translated_text_escaped: safeText,     // safe for JSON embedding\n  translation_tokens_used: estimatedTokens,\n  translation_completed: new Date().toISOString()\n};\n"
+      },
+      "id": "ac4187a4-e0ba-4176-a0f2-b4ca8eb989b1",
+      "name": "Process Translation1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        1456
+      ],
+      "notes": "Processes translation response with rate limiting"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "translate",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "26ec0e6d-3a3b-432f-9e8f-b36892f6b554",
+      "name": "Check Decision Type1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        256,
+        1232
+      ],
+      "notes": "Routes based on user decision"
+    },
+    {
+      "parameters": {
+        "sendTo": "haileyfranchette@gmail.com",
+        "subject": "={{ 'Korean Novel Translation Complete - Chapter ' + $('Process Chapter Decision1').item.json.chapter_title }}",
+        "message": "={{ 'Translation completed successfully!\\n\\nChapter: ' + $('Process Chapter Decision1').item.json.chapter_title + '\\nSource: ' + $('Process Chapter Decision1').item.json.source_type + '\\nProcessing Date: ' + new Date().toLocaleString() + '\\n\\nGoogle Doc: https://docs.google.com/document/d/' + $json.documentId + '\\n\\nTranslation Stats:\\n- Original Korean: ' +$('Process Chapter Decision1').item.json.word_count + ' characters\\n- Translation Tokens Used: ~' + $('Process Translation1').first().json.translation_tokens_used + '\\n- Consistency Tokens Used: ~' + $('Process Consistency Check1').first().json.consistency_tokens_used + '\\n- Total Processing Time: ' + Math.round((new Date() - new Date($json.processing_started)) / 1000 / 60) + ' minutes\\n\\nNext Steps:\\n' + (($json.book_data && $json.book_data.current_chapter_index + 1 < $json.book_data.total_chapters) ? 'Ready for next chapter approval at: ' + $json.webhookUrl + '/chapter-approval' : 'All chapters processed!') }}",
+        "options": {}
+      },
+      "id": "8ff93221-dcfc-46a3-97ed-f1a9775cce74",
+      "name": "Send Completion Email1",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [
+        1952,
+        1424
+      ],
+      "webhookId": "50640b92-08fb-4487-a539-6bedda38c79f",
+      "notesInFlow": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "cfilzGYodLy3YPp8",
+          "name": "Gmail account"
+        }
+      },
+      "notes": "Sends email notification of completion"
+    },
+    {
+      "parameters": {
+        "folderId": "=1og32eq5l2I0zgq5tWid_Y54ClSJiZS8c",
+        "title": "={{ $('Process Chapter Decision1').item.json.chapter_title }}"
+      },
+      "id": "58d5ddd0-085e-4777-9e10-a121a1c7ba41",
+      "name": "Create Google Doc",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        512,
+        1408
+      ],
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "6w7sVgMZVlMK1Bc1",
+          "name": "Google Docs account 2"
+        }
+      },
+      "notes": "Creates a new Google Doc for the translated chapter"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get Names Database1": {
+      "main": [
+        [
+          {
+            "node": "Parse Names Database1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Names Database1": {
+      "main": [
+        [
+          {
+            "node": "Create Google Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initial Translation1": {
+      "main": [
+        [
+          {
+            "node": "Process Translation1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chapter Decision Handler1": {
+      "main": [
+        [
+          {
+            "node": "Process Chapter Decision1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Consistency Check1": {
+      "main": [
+        [
+          {
+            "node": "Add Content to Doc1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consistency Check1": {
+      "main": [
+        [
+          {
+            "node": "Process Consistency Check1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Chapter Decision1": {
+      "main": [
+        [
+          {
+            "node": "Check if Next Chapter1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Decision Type1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Translation1": {
+      "main": [
+        [
+          {
+            "node": "Consistency Check1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Decision Type1": {
+      "main": [
+        [
+          {
+            "node": "Get Names Database1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Content to Doc1": {
+      "main": [
+        [
+          {
+            "node": "Send Completion Email1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Google Doc": {
+      "main": [
+        [
+          {
+            "node": "Initial Translation1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b52e4685-06d2-4fa1-9bed-756955054d83",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c72fdb145264cd0f09484486a422c25ae0e73e5a53a5845ac052d7aaa7e87359"
+  },
+  "id": "adO8pYfYrm07IBGb",
+  "tags": []
+}

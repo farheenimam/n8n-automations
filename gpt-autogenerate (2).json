@@ -1,0 +1,323 @@
+{
+  "name": "gpt-autogenerate",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "upload-problem",
+        "options": {}
+      },
+      "id": "6fad64cd-4b72-4018-89e7-5b0e6c34dd56",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        -32
+      ],
+      "webhookDescription": "POST your problem file here.",
+      "webhookId": "97df6224-aac2-4555-8c6b-569c478c589d"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Each uploaded file will come as a separate binary key from the webhook input\n// Example keys: data1, data2, data3 — corresponding to the three uploaded files\n\n// Convert all three files from binary to UTF-8 text\nconst statement = .data1.data.toString('utf8');\nconst sampleInput = $binary.data2.data.toString('utf8');\nconst sampleOutput = $binary.data3.data.toString('utf8');\n\n// Return them as JSON so the next node (like Ollama or LLM node) can use them\nreturn [\n  {\n    json: {\n      statement,\n      sampleInput,\n      sampleOutput\n    }\n  }\n];\n"
+      },
+      "id": "5c219667-8708-4712-97a7-45f3d98d26f0",
+      "name": "Extract File Content",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -144,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "fileName": "/home/farheen/n8n/code.txt",
+        "dataPropertyName": "body.response",
+        "options": {}
+      },
+      "id": "de971588-9a59-4235-a2df-aa68abab1719",
+      "name": "Save Code",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        352,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "command": "python3 /home/farheen/n8n/code.txt < /home/farheen/n8n/large_input.txt > /home/farheen/n8n/output.txt"
+      },
+      "id": "ca1e56b0-1b7a-4560-9ed8-5a32fc9d7991",
+      "name": "Run Generated Code",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        608,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "fd87b791-1df3-48ca-af18-c208b04875d3",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        864,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "path": "upload-large-input",
+        "options": {}
+      },
+      "id": "360341af-294d-4cf1-8223-f54cf9b7e981",
+      "name": "Upload Large Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        224
+      ],
+      "webhookDescription": "POST large input file here.",
+      "webhookId": "990fbf60-a26b-4c13-ada5-e25b92033383"
+    },
+    {
+      "parameters": {
+        "functionCode": "const fs = require('fs');\n\n// Get the uploaded binary file\nconst uploaded = $binary.data;\n\n// Decode binary data to text (assuming text dataset)\nconst content = Buffer.from(uploaded.data, 'base64').toString('utf8');\n\n// Save to a temporary location\nfs.writeFileSync('/home/farheen/n8n/large_input.txt', content);\n\nreturn [{ json: { message: 'File saved successfully' } }];"
+      },
+      "id": "287600a4-3330-448e-9b89-77d5680b1337",
+      "name": "Save Large Input File",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -464,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "command": "python3 /home/farheen/n8n/code.txt < /home/farheen/n8n/large_input.txt > /home/farheen/n8n/output.txt"
+      },
+      "id": "df284a43-4c98-48b0-8301-0d45151dbc97",
+      "name": "Run Code on Large Input",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "const fs = require('fs');\n\n// Read the output file content\nconst outputPath = '/home/farheen/n8n/output.txt';\nlet output = '';\ntry {\n  output = fs.readFileSync(outputPath, 'utf8');\n} catch (err) {\n  output = 'Error reading output: ' + err.message;\n}\n\nreturn [{\n  binary: {\n    data: {\n      data: Buffer.from(output).toString('base64'),\n      mimeType: 'text/plain',\n      fileName: 'output.txt'\n    }\n  }\n}];"
+      },
+      "id": "6629e383-70cb-4e7d-8810-c498556318ec",
+      "name": "Load Output File",
+      "type": "n8n-nodes-base.functionItem",
+      "typeVersion": 1,
+      "position": [
+        208,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "5a783d3e-d73c-4ad0-a474-26e48a047bc7",
+      "name": "Return Output to User",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        480,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama-docker:11434/api/chat",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "ollamaApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"HELLO\"\n    }\n  ]\n  \"stream\": false\n}\n",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "dcde8e31-5770-41da-a3f1-e4a50e1d4137",
+      "name": "Consistency Check1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        64,
+        -16
+      ],
+      "credentials": {
+        "ollamaApi": {
+          "id": "H4LnMY0YMmSpWWoi",
+          "name": "Ollama account 2"
+        }
+      },
+      "notes": "Checks and corrects name consistency using Claude"
+    }
+  ],
+  "pinData": {
+    "Webhook Trigger": [
+      {
+        "json": {
+          "headers": {
+            "host": "localhost:5678",
+            "connection": "keep-alive",
+            "content-length": "62",
+            "cache-control": "max-age=0",
+            "sec-ch-ua": "\"Google Chrome\";v=\"141\", \"Not?A_Brand\";v=\"8\", \"Chromium\";v=\"141\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Linux\"",
+            "upgrade-insecure-requests": "1",
+            "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+            "origin": "http://127.0.0.1:5500",
+            "content-type": "application/x-www-form-urlencoded",
+            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "sec-fetch-site": "cross-site",
+            "sec-fetch-mode": "navigate",
+            "sec-fetch-user": "?1",
+            "sec-fetch-dest": "document",
+            "referer": "http://127.0.0.1:5500/",
+            "accept-encoding": "gzip, deflate, br, zstd",
+            "accept-language": "en-GB,en-US;q=0.9,en;q=0.8"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "problem": "sample_in.txt",
+            "example": "sample_in.txt",
+            "hint": "statement.txt"
+          },
+          "webhookUrl": "http://localhost:5678/webhook-test/upload-problem",
+          "executionMode": "test"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract File Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract File Content": {
+      "main": [
+        [
+          {
+            "node": "Consistency Check1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Code": {
+      "main": [
+        [
+          {
+            "node": "Run Generated Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Generated Code": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Large Input": {
+      "main": [
+        [
+          {
+            "node": "Save Large Input File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Large Input File": {
+      "main": [
+        [
+          {
+            "node": "Run Code on Large Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Code on Large Input": {
+      "main": [
+        [
+          {
+            "node": "Load Output File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Output File": {
+      "main": [
+        [
+          {
+            "node": "Return Output to User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consistency Check1": {
+      "main": [
+        [
+          {
+            "node": "Save Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ade08030-ae04-4ef2-81b0-be0a0af40a9e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c72fdb145264cd0f09484486a422c25ae0e73e5a53a5845ac052d7aaa7e87359"
+  },
+  "id": "7gm7log3CSeZxZ4S",
+  "tags": []
+}
